@@ -1,9 +1,13 @@
 # ContextPacker
 
+<img width="512" height="512" alt="image" src="https://github.com/user-attachments/assets/9e47d33b-0e57-452a-9fdc-696089ecb094" />
+
+
 ## What it is
 
 ContextPacker is a transcription and context–compression tool.
 It converts repositories into **context artifacts** suitable for LLM consumption.
+
 
 Core principle:
 
@@ -43,6 +47,9 @@ input
 ↓
 artifact
 
+<img width="795" height="815" alt="image" src="https://github.com/user-attachments/assets/af056bf5-e7a6-41b3-9509-1d88bc9e13ad" />
+
+
 Each stage:
 
 - accepts a bounded structure
@@ -57,6 +64,8 @@ Each stage:
 - **Runner**: orchestration layer; no domain logic
 
 ## Usage (conceptual)
+
+in src folder, python -m contextpacker
 
 contextpacker run \
  --input ./notes \
