@@ -41,9 +41,22 @@ def build_manifest(
             "preset": cfg.preset,
             "selected_top_level": list(cfg.selected_top_level),
             "include_root_text_files": cfg.include_root_text_files,
+            "generate_project_tree_only": cfg.generate_project_tree_only,
+            "allow_suffixes": list(cfg.allow_suffixes),
+            "allow_filenames": list(cfg.allow_filenames),
             "limits": {
                 "max_file_bytes": cfg.max_file_bytes,
                 "max_total_bytes": cfg.max_total_bytes,
+            },
+            "sampling": {
+                "enabled": cfg.sampling.enabled,
+                "unit": cfg.sampling.unit,
+                "policy": cfg.sampling.policy,
+                "keep_ratio": cfg.sampling.keep_ratio,
+                "seed": cfg.sampling.seed,
+                "block_mean": cfg.sampling.block_mean,
+                "drop_prob": cfg.sampling.drop_prob,
+                "preserve_prefix_chars": cfg.sampling.preserve_prefix_chars,
             },
         },
         "stats": {

@@ -4,13 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "contextpacker"
-version = "0.2.0"
+dynamic = ["version"]
 description = "ContextPacker: project transcript + changes diff generator"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+build = ["pyinstaller>=6.11"]
+
+[project.gui-scripts]
+contextpacker = "contextpacker.__main__:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.setuptools.dynamic]
+version = {attr = "contextpacker.__version__"}
+
+[tool.setuptools.package-data]
+contextpacker = ["app/resources/*.png"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -20,6 +20,15 @@ ALWAYS_IGNORE = {
     "*.jpg",
     "*.jpeg",
     "*.webp",
+    ".env",
+    "*.env",
+    ".env.*",
+    "local.properties",
+    "secrets.json",
+    ".npmrc",
+    "id_rsa",
+    "*.pem",
+    "*.key",
 }
 
 

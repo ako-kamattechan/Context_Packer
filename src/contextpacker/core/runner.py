@@ -11,6 +11,7 @@ from ..io.out_paths import get_output_paths
 from ..io.manifest import build_manifest
 from ..render.tree_render import render_tree
 from ..io.file_read import read_text_safe
+from .sampling import sample_transcript_text
 
 
 def run(config: Config, cancel: CancelToken | None = None) -> Artifacts:
@@ -60,19 +61,23 @@ def run_preview(config: Config, cancel: CancelToken | None = None) -> PreviewArt
 
     truncated = filt.truncated_by_total
 
-    # Build a small transcript snippet
-    snippet_parts = []
-    # e.g. first 3 files
-    for p in valid_files[:3]:
-        check_cancel(cancel)
-        content = read_text_safe(p)
-        # truncate large files for preview snippet
-        if len(content) > 1000:
-            content = content[:1000] + "\n... (truncated for preview)"
-        rel = p.relative_to(cfg.project_root)
-        snippet_parts.append(f"File: {rel}\n[\n{content}\n]\n{'-' * 20}")
-
-    transcript_preview = "\n".join(snippet_parts)
+    transcript_preview = ""
+    if not cfg.generate_project_tree_only:
+        # Build a small transcript snippet
+        snippet_parts = []
+        # e.g. first 3 files
+        for p in valid_files[:3]:
+            check_cancel(cancel)
+            content = read_text_safe(p)
+            # truncate large files for preview snippet
+            if len(content) > 1000:
+                content = content[:1000] + "\n... (truncated for preview)"
+            rel = p.relative_to(cfg.project_root)
+            snippet_parts.append(f"File: {rel}\n[\n{content}\n]\n{'-' * 40}\n")
+        transcript_preview, _sampling_meta = sample_transcript_text(
+            "\n".join(snippet_parts),
+            cfg.sampling,
+        )
 
     return PreviewArtifacts(
         tree_text=tree_text,

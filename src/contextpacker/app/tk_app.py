@@ -6,6 +6,7 @@ import threading
 import queue
 
 from ..core.config import Config
+from ..core.sampling import SamplingSpec
 from ..core.runner import run, run_preview
 from ..core.cancel import CancelToken, CancelledError
 from ..policy.presets import PRESETS
@@ -99,15 +100,119 @@ class TkApp:
         self.preset_menu.grid(row=0, column=1, sticky="w", padx=(0, 12), pady=(12, 6))
         self.preset_menu.bind("<<ComboboxSelected>>", lambda e: self.populate_list())
 
+        ## Checkboxes (Top)
+
         self.include_root_text = tk.BooleanVar(value=True)
+
         self.chk_root_text = ttk.Checkbutton(
             ctrl,
             text="Include root text files",
             variable=self.include_root_text,
             style="TCheckbutton",
         )
-        self.chk_root_text.grid(
-            row=1, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 10)
+
+        self.chk_root_text.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
+
+        self.generate_tree_only = tk.BooleanVar(value=False)
+
+        # Sampling controls (trial)
+        self.sample_enabled = tk.BooleanVar(value=False)
+        self.sample_unit = tk.StringVar(value="word")  # word | char
+        self.sample_policy = tk.StringVar(
+            value="bernoulli"
+        )  # bernoulli | block_dropout
+        self.sample_keep = tk.StringVar(value="1.0")  # float
+        self.sample_seed = tk.StringVar(value="0")  # int
+        self.sample_block_mean = tk.StringVar(value="12.0")  # float
+        self.sample_drop_prob = tk.StringVar(value="")  # optional float
+        self.sample_preserve_prefix = tk.StringVar(value="0")  # int
+        self.chk_tree_only = ttk.Checkbutton(
+            ctrl,
+            text="Generate project tree only",
+            variable=self.generate_tree_only,
+            style="TCheckbutton",
+        )
+        self.chk_tree_only.grid(row=1, column=1, sticky="w", padx=(0, 12), pady=(0, 10))
+
+        # --- Sampling Panel ---
+        self.chk_sample = ttk.Checkbutton(
+            ctrl,
+            text="Enable transcript sampling (trial)",
+            variable=self.sample_enabled,
+            style="TCheckbutton",
+        )
+        self.chk_sample.grid(row=2, column=0, sticky="w", padx=12, pady=(0, 10))
+
+        # small row of sampling params
+        samp_row = ttk.Frame(ctrl, style="Panel.TFrame")
+        samp_row.grid(row=3, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
+        samp_row.columnconfigure(9, weight=1)
+
+        ttk.Label(samp_row, text="Unit:", style="TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        self.cmb_sample_unit = ttk.Combobox(
+            samp_row,
+            textvariable=self.sample_unit,
+            values=["word", "char"],
+            state="readonly",
+            width=7,
+        )
+        self.cmb_sample_unit.grid(row=0, column=1, sticky="w", padx=(6, 12))
+
+        ttk.Label(samp_row, text="Policy:", style="TLabel").grid(
+            row=0, column=2, sticky="w"
+        )
+        self.cmb_sample_policy = ttk.Combobox(
+            samp_row,
+            textvariable=self.sample_policy,
+            values=["bernoulli", "block_dropout"],
+            state="readonly",
+            width=12,
+        )
+        self.cmb_sample_policy.grid(row=0, column=3, sticky="w", padx=(6, 12))
+
+        ttk.Label(samp_row, text="Keep:", style="TLabel").grid(
+            row=0, column=4, sticky="w"
+        )
+        self.ent_sample_keep = ttk.Entry(samp_row, textvariable=self.sample_keep, width=6)
+        self.ent_sample_keep.grid(row=0, column=5, sticky="w", padx=(6, 12))
+
+        ttk.Label(samp_row, text="Seed:", style="TLabel").grid(
+            row=0, column=6, sticky="w"
+        )
+        self.ent_sample_seed = ttk.Entry(samp_row, textvariable=self.sample_seed, width=6)
+        self.ent_sample_seed.grid(row=0, column=7, sticky="w", padx=(6, 12))
+
+        # extra params for block-drop/prefix preservation
+        ttk.Label(samp_row, text="Drop p (opt):", style="TLabel").grid(
+            row=1, column=0, sticky="w", pady=(8, 0)
+        )
+        self.ent_sample_drop_prob = ttk.Entry(
+            samp_row, textvariable=self.sample_drop_prob, width=6
+        )
+        self.ent_sample_drop_prob.grid(
+            row=1, column=1, sticky="w", padx=(6, 12), pady=(8, 0)
+        )
+
+        ttk.Label(samp_row, text="Block mean:", style="TLabel").grid(
+            row=1, column=2, sticky="w", pady=(8, 0)
+        )
+        self.ent_sample_block_mean = ttk.Entry(
+            samp_row, textvariable=self.sample_block_mean, width=8
+        )
+        self.ent_sample_block_mean.grid(
+            row=1, column=3, sticky="w", padx=(6, 12), pady=(8, 0)
+        )
+
+        ttk.Label(samp_row, text="Preserve prefix chars:", style="TLabel").grid(
+            row=1, column=4, sticky="w", pady=(8, 0)
+        )
+        self.ent_sample_prefix = ttk.Entry(
+            samp_row, textvariable=self.sample_preserve_prefix, width=8
+        )
+        self.ent_sample_prefix.grid(
+            row=1, column=5, sticky="w", padx=(6, 12), pady=(8, 0)
         )
 
         # 3. Label for list
@@ -197,6 +302,10 @@ class TkApp:
         self.btn_generate.bind("<Enter>", lambda e: self._start_pulse())
         self.btn_generate.bind("<Leave>", lambda e: self._stop_pulse())
 
+        for var in (self.sample_enabled, self.sample_unit, self.sample_policy):
+            var.trace_add("write", self._on_sampling_option_changed)
+        self._sync_sampling_controls()
+
         # Start queue poller
         self.root.after(100, self._process_queue)
 
@@ -228,6 +337,32 @@ class TkApp:
             self.root.after_cancel(self._pulse_job)
             self._pulse_job = None
         self.btn_generate.configure(style="Accent.TButton")
+
+    def _on_sampling_option_changed(self, *_args):
+        self._sync_sampling_controls()
+
+    def _sync_sampling_controls(self):
+        sampling_enabled = bool(self.sample_enabled.get())
+        word_mode = self.sample_unit.get() == "word"
+
+        if not word_mode and self.sample_policy.get() != "bernoulli":
+            self.sample_policy.set("bernoulli")
+
+        block_mode = (
+            sampling_enabled
+            and word_mode
+            and self.sample_policy.get() == "block_dropout"
+        )
+
+        self.cmb_sample_unit.state(["!disabled"] if sampling_enabled else ["disabled"])
+        self.cmb_sample_policy.state(
+            ["!disabled"] if (sampling_enabled and word_mode) else ["disabled"]
+        )
+        self.ent_sample_keep.state(["!disabled"] if sampling_enabled else ["disabled"])
+        self.ent_sample_seed.state(["!disabled"] if sampling_enabled else ["disabled"])
+        self.ent_sample_prefix.state(["!disabled"] if sampling_enabled else ["disabled"])
+        self.ent_sample_block_mean.state(["!disabled"] if block_mode else ["disabled"])
+        self.ent_sample_drop_prob.state(["!disabled"] if block_mode else ["disabled"])
 
     # App Logic
 
@@ -295,11 +430,92 @@ class TkApp:
             messagebox.showwarning("Warning", "No modules selected.")
             return
 
+        preset = self.preset_var.get()
+
+        allow_suffixes: tuple[str, ...] = ()
+        allow_filenames: tuple[str, ...] = ()
+
+        if preset == "android_kotlin":
+            # "sources of truth" for a Kotlin Android project
+            allow_suffixes = (
+                ".kt",  # Kotlin sources
+                ".kts",  # Gradle Kotlin scripts
+                ".xml",  # AndroidManifest + res xml + misc xml
+                ".properties",  # gradle.properties, local.properties (if present)
+                ".pro",  # proguard-rules.pro
+                ".toml",  # version catalogs (libs.versions.toml)
+                ".txt",  # optional (e.g., some gradle metadata you may care about)
+                ".md",  # optional docs
+            )
+            allow_filenames = ("gradlew",)
+
+        elif preset == "hc11cc":
+            # HC11 compiler project boundary
+            allow_suffixes = (
+                ".rs",  # Rust sources
+                ".toml",  # Cargo.toml (+ other toml)
+                ".lock",  # Cargo.lock
+                ".md",  # docs
+                ".txt",  # notes
+                ".hc",  # your language sources (if you use this extension)
+                ".asm",  # assembly
+                ".s",  # asm alt
+                ".inc",  # includes
+            )
+            allow_filenames = (
+                "Cargo.toml",
+                "Cargo.lock",
+                "README.md",
+                "LICENSE",
+                ".gitignore",
+            )
+
+        # Sampling spec (safe parse)
+        def ffloat(s: str, default: float) -> float:
+            try:
+                return float(s)
+            except Exception:
+                return default
+
+        def foptfloat(s: str) -> float | None:
+            text = s.strip()
+            if not text:
+                return None
+            try:
+                return float(text)
+            except Exception:
+                return None
+
+        def fint(s: str, default: int) -> int:
+            try:
+                return int(s)
+            except Exception:
+                return default
+
+        sampling = SamplingSpec(
+            enabled=bool(self.sample_enabled.get()),
+            unit=self.sample_unit.get()
+            if self.sample_unit.get() in ("word", "char")
+            else "word",
+            policy=self.sample_policy.get()
+            if self.sample_policy.get() in ("bernoulli", "block_dropout")
+            else "bernoulli",
+            keep_ratio=ffloat(self.sample_keep.get(), 1.0),
+            seed=fint(self.sample_seed.get(), 0),
+            block_mean=ffloat(self.sample_block_mean.get(), 12.0),
+            drop_prob=foptfloat(self.sample_drop_prob.get()),
+            preserve_prefix_chars=fint(self.sample_preserve_prefix.get(), 0),
+        )
+
         cfg = Config(
             project_root=self.project_path,
             selected_top_level=selected,
-            preset=self.preset_var.get(),
+            preset=preset,
+            allow_suffixes=allow_suffixes,
+            allow_filenames=allow_filenames,
             include_root_text_files=self.include_root_text.get(),
+            generate_project_tree_only=self.generate_tree_only.get(),
+            sampling=sampling,
         )
 
         # UI Lock

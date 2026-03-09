@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from .sampling import SamplingSpec
 from pathlib import Path
 from typing import Literal
 
@@ -19,6 +20,10 @@ class Config:
     selected_top_level: tuple[str, ...] = ()
     preset: str = "generic"  # rust, csharp, node, python, generic
     include_root_text_files: bool = True
+    generate_project_tree_only: bool = False
+    allow_suffixes: tuple[str, ...] = ()
+    allow_filenames: tuple[str, ...] = ()
+    sampling: SamplingSpec = field(default_factory=SamplingSpec)
 
     # Safety / determinism
     max_file_bytes: int = 512_000  # 512 KB per file (tune later)
@@ -41,11 +46,15 @@ class Config:
             selected_top_level=sel,
             preset=self.preset,
             include_root_text_files=self.include_root_text_files,
+            generate_project_tree_only=self.generate_project_tree_only,
             max_file_bytes=self.max_file_bytes,
+            allow_suffixes=tuple(sorted({s.lower() for s in self.allow_suffixes})),
             max_total_bytes=self.max_total_bytes,
             diff_mode=self.diff_mode,
             preview_max_files=self.preview_max_files,
             preview_max_chars=self.preview_max_chars,
             app_title=self.app_title,
             outputs=self.outputs,
+            allow_filenames=tuple(sorted(set(self.allow_filenames))),
+            sampling=self.sampling.normalized(),
         )

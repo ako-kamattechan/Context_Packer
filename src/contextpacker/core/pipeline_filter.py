@@ -24,6 +24,17 @@ def filter_snapshot(
 
     check_cancel(cancel)
 
+    ## Generate Project Tree Only if True
+
+    if cfg.generate_project_tree_only:
+        return FilteredSnapshot(
+            root=snapshot.root,
+            visible_nodes=visible_nodes,
+            tree_roots=tree_roots,
+            files_to_read=[],
+            truncated_by_total=False,
+        )
+
     files = compute_files_to_read(
         snapshot=snapshot,
         config=cfg,
@@ -53,8 +64,19 @@ def filter_snapshot(
             continue
 
         node = snapshot.nodes.get(p)
+
+        ## Check Boundaries
         if node is None or node.is_dir:
             continue
+
+        # Suffix boundary: if allow_suffixes is non-empty, only include files with those suffixes
+        if cfg.allow_suffixes:
+            suffix = p.suffix.lower()
+            if (suffix not in cfg.allow_suffixes) and (
+                p.name not in cfg.allow_filenames
+            ):
+                continue
+
         if node.size_bytes > cfg.max_file_bytes:
             continue
         if not is_probably_text(p):

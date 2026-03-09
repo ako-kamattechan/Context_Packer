@@ -1,7 +1,15 @@
 __pycache__/
 *.pyc
 .env
+*.env
+.env.*
+.venv/
+venv/
+env/
 .dist/
 build/
+dist/
+release/
 *.log
+*.egg-info/
 contextpacker_out/

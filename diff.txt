@@ -1,0 +1,560 @@
+diff --git a/.gitignore b/.gitignore
+index 97f7c57..8575e5f 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,7 +1,15 @@
+ __pycache__/
+ *.pyc
+ .env
++*.env
++.env.*
++.venv/
++venv/
++env/
+ .dist/
+ build/
++dist/
++release/
+ *.log
+-contextpacker_out/
+\ No newline at end of file
++*.egg-info/
++contextpacker_out/
+diff --git a/pyproject.toml b/pyproject.toml
+index 5037275..a921376 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,13 +4,25 @@ build-backend = "setuptools.build_meta"
+ 
+ [project]
+ name = "contextpacker"
+-version = "0.2.0"
++dynamic = ["version"]
+ description = "ContextPacker: project transcript + changes diff generator"
+ requires-python = ">=3.10"
+ dependencies = []
+ 
++[project.optional-dependencies]
++build = ["pyinstaller>=6.11"]
++
++[project.gui-scripts]
++contextpacker = "contextpacker.__main__:main"
++
+ [tool.setuptools]
+ package-dir = {"" = "src"}
+ 
++[tool.setuptools.dynamic]
++version = {attr = "contextpacker.__version__"}
++
++[tool.setuptools.package-data]
++contextpacker = ["app/resources/*.png"]
++
+ [tool.setuptools.packages.find]
+ where = ["src"]
+diff --git a/src/contextpacker/__init__.py b/src/contextpacker/__init__.py
+index 25312d0..ee9e94b 100644
+--- a/src/contextpacker/__init__.py
++++ b/src/contextpacker/__init__.py
+@@ -1,2 +1,2 @@
+ __all__ = ["__version__"]
+-__version__ = "0.2.0"
++__version__ = "0.4.0"
+diff --git a/src/contextpacker/app/tk_app.py b/src/contextpacker/app/tk_app.py
+index fe12981..a4a683a 100644
+--- a/src/contextpacker/app/tk_app.py
++++ b/src/contextpacker/app/tk_app.py
+@@ -6,6 +6,7 @@ import threading
+ import queue
+ 
+ from ..core.config import Config
++from ..core.sampling import SamplingSpec
+ from ..core.runner import run, run_preview
+ from ..core.cancel import CancelToken, CancelledError
+ from ..policy.presets import PRESETS
+@@ -99,15 +100,119 @@ class TkApp:
+         self.preset_menu.grid(row=0, column=1, sticky="w", padx=(0, 12), pady=(12, 6))
+         self.preset_menu.bind("<<ComboboxSelected>>", lambda e: self.populate_list())
+ 
++        ## Checkboxes (Top)
++
+         self.include_root_text = tk.BooleanVar(value=True)
++
+         self.chk_root_text = ttk.Checkbutton(
+             ctrl,
+             text="Include root text files",
+             variable=self.include_root_text,
+             style="TCheckbutton",
+         )
+-        self.chk_root_text.grid(
+-            row=1, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 10)
++
++        self.chk_root_text.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
++
++        self.generate_tree_only = tk.BooleanVar(value=False)
++
++        # Sampling controls (trial)
++        self.sample_enabled = tk.BooleanVar(value=False)
++        self.sample_unit = tk.StringVar(value="word")  # word | char
++        self.sample_policy = tk.StringVar(
++            value="bernoulli"
++        )  # bernoulli | block_dropout
++        self.sample_keep = tk.StringVar(value="1.0")  # float
++        self.sample_seed = tk.StringVar(value="0")  # int
++        self.sample_block_mean = tk.StringVar(value="12.0")  # float
++        self.sample_drop_prob = tk.StringVar(value="")  # optional float
++        self.sample_preserve_prefix = tk.StringVar(value="0")  # int
++        self.chk_tree_only = ttk.Checkbutton(
++            ctrl,
++            text="Generate project tree only",
++            variable=self.generate_tree_only,
++            style="TCheckbutton",
++        )
++        self.chk_tree_only.grid(row=1, column=1, sticky="w", padx=(0, 12), pady=(0, 10))
++
++        # --- Sampling Panel ---
++        self.chk_sample = ttk.Checkbutton(
++            ctrl,
++            text="Enable transcript sampling (trial)",
++            variable=self.sample_enabled,
++            style="TCheckbutton",
++        )
++        self.chk_sample.grid(row=2, column=0, sticky="w", padx=12, pady=(0, 10))
++
++        # small row of sampling params
++        samp_row = ttk.Frame(ctrl, style="Panel.TFrame")
++        samp_row.grid(row=3, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 12))
++        samp_row.columnconfigure(9, weight=1)
++
++        ttk.Label(samp_row, text="Unit:", style="TLabel").grid(
++            row=0, column=0, sticky="w"
++        )
++        self.cmb_sample_unit = ttk.Combobox(
++            samp_row,
++            textvariable=self.sample_unit,
++            values=["word", "char"],
++            state="readonly",
++            width=7,
++        )
++        self.cmb_sample_unit.grid(row=0, column=1, sticky="w", padx=(6, 12))
++
++        ttk.Label(samp_row, text="Policy:", style="TLabel").grid(
++            row=0, column=2, sticky="w"
++        )
++        self.cmb_sample_policy = ttk.Combobox(
++            samp_row,
++            textvariable=self.sample_policy,
++            values=["bernoulli", "block_dropout"],
++            state="readonly",
++            width=12,
++        )
++        self.cmb_sample_policy.grid(row=0, column=3, sticky="w", padx=(6, 12))
++
++        ttk.Label(samp_row, text="Keep:", style="TLabel").grid(
++            row=0, column=4, sticky="w"
++        )
++        self.ent_sample_keep = ttk.Entry(samp_row, textvariable=self.sample_keep, width=6)
++        self.ent_sample_keep.grid(row=0, column=5, sticky="w", padx=(6, 12))
++
++        ttk.Label(samp_row, text="Seed:", style="TLabel").grid(
++            row=0, column=6, sticky="w"
++        )
++        self.ent_sample_seed = ttk.Entry(samp_row, textvariable=self.sample_seed, width=6)
++        self.ent_sample_seed.grid(row=0, column=7, sticky="w", padx=(6, 12))
++
++        # extra params for block-drop/prefix preservation
++        ttk.Label(samp_row, text="Drop p (opt):", style="TLabel").grid(
++            row=1, column=0, sticky="w", pady=(8, 0)
++        )
++        self.ent_sample_drop_prob = ttk.Entry(
++            samp_row, textvariable=self.sample_drop_prob, width=6
++        )
++        self.ent_sample_drop_prob.grid(
++            row=1, column=1, sticky="w", padx=(6, 12), pady=(8, 0)
++        )
++
++        ttk.Label(samp_row, text="Block mean:", style="TLabel").grid(
++            row=1, column=2, sticky="w", pady=(8, 0)
++        )
++        self.ent_sample_block_mean = ttk.Entry(
++            samp_row, textvariable=self.sample_block_mean, width=8
++        )
++        self.ent_sample_block_mean.grid(
++            row=1, column=3, sticky="w", padx=(6, 12), pady=(8, 0)
++        )
++
++        ttk.Label(samp_row, text="Preserve prefix chars:", style="TLabel").grid(
++            row=1, column=4, sticky="w", pady=(8, 0)
++        )
++        self.ent_sample_prefix = ttk.Entry(
++            samp_row, textvariable=self.sample_preserve_prefix, width=8
++        )
++        self.ent_sample_prefix.grid(
++            row=1, column=5, sticky="w", padx=(6, 12), pady=(8, 0)
+         )
+ 
+         # 3. Label for list
+@@ -197,6 +302,10 @@ class TkApp:
+         self.btn_generate.bind("<Enter>", lambda e: self._start_pulse())
+         self.btn_generate.bind("<Leave>", lambda e: self._stop_pulse())
+ 
++        for var in (self.sample_enabled, self.sample_unit, self.sample_policy):
++            var.trace_add("write", self._on_sampling_option_changed)
++        self._sync_sampling_controls()
++
+         # Start queue poller
+         self.root.after(100, self._process_queue)
+ 
+@@ -229,6 +338,32 @@ class TkApp:
+             self._pulse_job = None
+         self.btn_generate.configure(style="Accent.TButton")
+ 
++    def _on_sampling_option_changed(self, *_args):
++        self._sync_sampling_controls()
++
++    def _sync_sampling_controls(self):
++        sampling_enabled = bool(self.sample_enabled.get())
++        word_mode = self.sample_unit.get() == "word"
++
++        if not word_mode and self.sample_policy.get() != "bernoulli":
++            self.sample_policy.set("bernoulli")
++
++        block_mode = (
++            sampling_enabled
++            and word_mode
++            and self.sample_policy.get() == "block_dropout"
++        )
++
++        self.cmb_sample_unit.state(["!disabled"] if sampling_enabled else ["disabled"])
++        self.cmb_sample_policy.state(
++            ["!disabled"] if (sampling_enabled and word_mode) else ["disabled"]
++        )
++        self.ent_sample_keep.state(["!disabled"] if sampling_enabled else ["disabled"])
++        self.ent_sample_seed.state(["!disabled"] if sampling_enabled else ["disabled"])
++        self.ent_sample_prefix.state(["!disabled"] if sampling_enabled else ["disabled"])
++        self.ent_sample_block_mean.state(["!disabled"] if block_mode else ["disabled"])
++        self.ent_sample_drop_prob.state(["!disabled"] if block_mode else ["disabled"])
++
+     # App Logic
+ 
+     def load_project(self):
+@@ -295,11 +430,92 @@ class TkApp:
+             messagebox.showwarning("Warning", "No modules selected.")
+             return
+ 
++        preset = self.preset_var.get()
++
++        allow_suffixes: tuple[str, ...] = ()
++        allow_filenames: tuple[str, ...] = ()
++
++        if preset == "android_kotlin":
++            # "sources of truth" for a Kotlin Android project
++            allow_suffixes = (
++                ".kt",  # Kotlin sources
++                ".kts",  # Gradle Kotlin scripts
++                ".xml",  # AndroidManifest + res xml + misc xml
++                ".properties",  # gradle.properties, local.properties (if present)
++                ".pro",  # proguard-rules.pro
++                ".toml",  # version catalogs (libs.versions.toml)
++                ".txt",  # optional (e.g., some gradle metadata you may care about)
++                ".md",  # optional docs
++            )
++            allow_filenames = ("gradlew",)
++
++        elif preset == "hc11cc":
++            # HC11 compiler project boundary
++            allow_suffixes = (
++                ".rs",  # Rust sources
++                ".toml",  # Cargo.toml (+ other toml)
++                ".lock",  # Cargo.lock
++                ".md",  # docs
++                ".txt",  # notes
++                ".hc",  # your language sources (if you use this extension)
++                ".asm",  # assembly
++                ".s",  # asm alt
++                ".inc",  # includes
++            )
++            allow_filenames = (
++                "Cargo.toml",
++                "Cargo.lock",
++                "README.md",
++                "LICENSE",
++                ".gitignore",
++            )
++
++        # Sampling spec (safe parse)
++        def ffloat(s: str, default: float) -> float:
++            try:
++                return float(s)
++            except Exception:
++                return default
++
++        def foptfloat(s: str) -> float | None:
++            text = s.strip()
++            if not text:
++                return None
++            try:
++                return float(text)
++            except Exception:
++                return None
++
++        def fint(s: str, default: int) -> int:
++            try:
++                return int(s)
++            except Exception:
++                return default
++
++        sampling = SamplingSpec(
++            enabled=bool(self.sample_enabled.get()),
++            unit=self.sample_unit.get()
++            if self.sample_unit.get() in ("word", "char")
++            else "word",
++            policy=self.sample_policy.get()
++            if self.sample_policy.get() in ("bernoulli", "block_dropout")
++            else "bernoulli",
++            keep_ratio=ffloat(self.sample_keep.get(), 1.0),
++            seed=fint(self.sample_seed.get(), 0),
++            block_mean=ffloat(self.sample_block_mean.get(), 12.0),
++            drop_prob=foptfloat(self.sample_drop_prob.get()),
++            preserve_prefix_chars=fint(self.sample_preserve_prefix.get(), 0),
++        )
++
+         cfg = Config(
+             project_root=self.project_path,
+             selected_top_level=selected,
+-            preset=self.preset_var.get(),
++            preset=preset,
++            allow_suffixes=allow_suffixes,
++            allow_filenames=allow_filenames,
+             include_root_text_files=self.include_root_text.get(),
++            generate_project_tree_only=self.generate_tree_only.get(),
++            sampling=sampling,
+         )
+ 
+         # UI Lock
+diff --git a/src/contextpacker/core/config.py b/src/contextpacker/core/config.py
+index c4f6d53..1f05c4b 100644
+--- a/src/contextpacker/core/config.py
++++ b/src/contextpacker/core/config.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ from dataclasses import dataclass, field
++from .sampling import SamplingSpec
+ from pathlib import Path
+ from typing import Literal
+ 
+@@ -19,6 +20,10 @@ class Config:
+     selected_top_level: tuple[str, ...] = ()
+     preset: str = "generic"  # rust, csharp, node, python, generic
+     include_root_text_files: bool = True
++    generate_project_tree_only: bool = False
++    allow_suffixes: tuple[str, ...] = ()
++    allow_filenames: tuple[str, ...] = ()
++    sampling: SamplingSpec = field(default_factory=SamplingSpec)
+ 
+     # Safety / determinism
+     max_file_bytes: int = 512_000  # 512 KB per file (tune later)
+@@ -41,11 +46,15 @@ class Config:
+             selected_top_level=sel,
+             preset=self.preset,
+             include_root_text_files=self.include_root_text_files,
++            generate_project_tree_only=self.generate_project_tree_only,
+             max_file_bytes=self.max_file_bytes,
++            allow_suffixes=tuple(sorted({s.lower() for s in self.allow_suffixes})),
+             max_total_bytes=self.max_total_bytes,
+             diff_mode=self.diff_mode,
+             preview_max_files=self.preview_max_files,
+             preview_max_chars=self.preview_max_chars,
+             app_title=self.app_title,
+             outputs=self.outputs,
++            allow_filenames=tuple(sorted(set(self.allow_filenames))),
++            sampling=self.sampling.normalized(),
+         )
+diff --git a/src/contextpacker/core/pipeline_build.py b/src/contextpacker/core/pipeline_build.py
+index 81b5364..b229859 100644
+--- a/src/contextpacker/core/pipeline_build.py
++++ b/src/contextpacker/core/pipeline_build.py
+@@ -7,7 +7,7 @@ from ..render.tree_render import render_tree
+ from ..render.transcript_render import render_transcript
+ from ..render.diff_render import unified_diff_text
+ from .cancel import CancelToken, check_cancel
+-
++from .sampling import sample_transcript_text
+ 
+ def build(
+     snapshot: Snapshot,
+@@ -37,6 +37,10 @@ def build(
+     )
+     check_cancel(cancel)
+ 
++    # Apply optional sampling (lossy compression) AFTER rendering.
++    transcript_text, _sampling_meta = sample_transcript_text(transcript_text, cfg.sampling)
++    check_cancel(cancel)
++
+     diff_text = unified_diff_text(old_transcript, transcript_text)
+ 
+     return BuiltArtifacts(
+diff --git a/src/contextpacker/core/pipeline_filter.py b/src/contextpacker/core/pipeline_filter.py
+index e5e5068..76fd956 100644
+--- a/src/contextpacker/core/pipeline_filter.py
++++ b/src/contextpacker/core/pipeline_filter.py
+@@ -24,6 +24,17 @@ def filter_snapshot(
+ 
+     check_cancel(cancel)
+ 
++    ## Generate Project Tree Only if True
++
++    if cfg.generate_project_tree_only:
++        return FilteredSnapshot(
++            root=snapshot.root,
++            visible_nodes=visible_nodes,
++            tree_roots=tree_roots,
++            files_to_read=[],
++            truncated_by_total=False,
++        )
++
+     files = compute_files_to_read(
+         snapshot=snapshot,
+         config=cfg,
+@@ -53,8 +64,19 @@ def filter_snapshot(
+             continue
+ 
+         node = snapshot.nodes.get(p)
++
++        ## Check Boundaries
+         if node is None or node.is_dir:
+             continue
++
++        # Suffix boundary: if allow_suffixes is non-empty, only include files with those suffixes
++        if cfg.allow_suffixes:
++            suffix = p.suffix.lower()
++            if (suffix not in cfg.allow_suffixes) and (
++                p.name not in cfg.allow_filenames
++            ):
++                continue
++
+         if node.size_bytes > cfg.max_file_bytes:
+             continue
+         if not is_probably_text(p):
+diff --git a/src/contextpacker/core/runner.py b/src/contextpacker/core/runner.py
+index e9d3511..7021f21 100644
+--- a/src/contextpacker/core/runner.py
++++ b/src/contextpacker/core/runner.py
+@@ -11,6 +11,7 @@ from ..io.out_paths import get_output_paths
+ from ..io.manifest import build_manifest
+ from ..render.tree_render import render_tree
+ from ..io.file_read import read_text_safe
++from .sampling import sample_transcript_text
+ 
+ 
+ def run(config: Config, cancel: CancelToken | None = None) -> Artifacts:
+@@ -60,19 +61,23 @@ def run_preview(config: Config, cancel: CancelToken | None = None) -> PreviewArt
+ 
+     truncated = filt.truncated_by_total
+ 
+-    # Build a small transcript snippet
+-    snippet_parts = []
+-    # e.g. first 3 files
+-    for p in valid_files[:3]:
+-        check_cancel(cancel)
+-        content = read_text_safe(p)
+-        # truncate large files for preview snippet
+-        if len(content) > 1000:
+-            content = content[:1000] + "\n... (truncated for preview)"
+-        rel = p.relative_to(cfg.project_root)
+-        snippet_parts.append(f"File: {rel}\n[\n{content}\n]\n{'-' * 20}")
+-
+-    transcript_preview = "\n".join(snippet_parts)
++    transcript_preview = ""
++    if not cfg.generate_project_tree_only:
++        # Build a small transcript snippet
++        snippet_parts = []
++        # e.g. first 3 files
++        for p in valid_files[:3]:
++            check_cancel(cancel)
++            content = read_text_safe(p)
++            # truncate large files for preview snippet
++            if len(content) > 1000:
++                content = content[:1000] + "\n... (truncated for preview)"
++            rel = p.relative_to(cfg.project_root)
++            snippet_parts.append(f"File: {rel}\n[\n{content}\n]\n{'-' * 40}\n")
++        transcript_preview, _sampling_meta = sample_transcript_text(
++            "\n".join(snippet_parts),
++            cfg.sampling,
++        )
+ 
+     return PreviewArtifacts(
+         tree_text=tree_text,
+diff --git a/src/contextpacker/io/manifest.py b/src/contextpacker/io/manifest.py
+index b08fb44..8ce297b 100644
+--- a/src/contextpacker/io/manifest.py
++++ b/src/contextpacker/io/manifest.py
+@@ -41,10 +41,23 @@ def build_manifest(
+             "preset": cfg.preset,
+             "selected_top_level": list(cfg.selected_top_level),
+             "include_root_text_files": cfg.include_root_text_files,
++            "generate_project_tree_only": cfg.generate_project_tree_only,
++            "allow_suffixes": list(cfg.allow_suffixes),
++            "allow_filenames": list(cfg.allow_filenames),
+             "limits": {
+                 "max_file_bytes": cfg.max_file_bytes,
+                 "max_total_bytes": cfg.max_total_bytes,
+             },
++            "sampling": {
++                "enabled": cfg.sampling.enabled,
++                "unit": cfg.sampling.unit,
++                "policy": cfg.sampling.policy,
++                "keep_ratio": cfg.sampling.keep_ratio,
++                "seed": cfg.sampling.seed,
++                "block_mean": cfg.sampling.block_mean,
++                "drop_prob": cfg.sampling.drop_prob,
++                "preserve_prefix_chars": cfg.sampling.preserve_prefix_chars,
++            },
+         },
+         "stats": {
+             "visible_nodes": len(filtered.visible_nodes),
+diff --git a/src/contextpacker/policy/presets.py b/src/contextpacker/policy/presets.py
+index 5411471..e191972 100644
+--- a/src/contextpacker/policy/presets.py
++++ b/src/contextpacker/policy/presets.py
+@@ -9,6 +9,40 @@ PRESETS: dict[str, set[str]] = {
+         "*.rmeta",
+     },
+     "csharp": {"bin", "obj", ".vs"},
+-    "node": {"node_modules", "dist", "build", ".next"},
++    "node": {"node_modules", "dist", "build", ".next", ".git", "dist", "build", "package-lock.json", ".env", "public" },
+     "python": {"__pycache__", ".venv", "venv", "*.pyc"},
++    "android_kotlin": {
++        ".gradle",
++        ".idea",
++        ".kotlin",
++        "build",
++        "captures",
++        ".cxx",
++        ".externalNativeBuild",
++        "out",
++    },
++    "hc11cc": {"target", "__pycache__", ".venv", "venv", "EVBU"},
++    "Android_Utility_Kernel": {
++        "build",
++        ".gradle",
++        ".idea",
++        ".kotlin",
++        "captures",
++        "local.properties",
++        "*.iml",
++        "*.apk",
++        "*.aab",
++        "*.ap_",
++        "*.keystore",
++        "*.jks",
++        "*.hprof",
++        "*.log",
++        "gradle-wrapper.jar",
++        "node_modules",
++        "dist",
++        ".vite",
++        ".cache",
++        "package-lock.json",
++        "contextpacker_out",
++    },
+ }
