@@ -32,6 +32,7 @@ class FilteredSnapshot:
 @dataclass(frozen=True)
 class BuiltArtifacts:
     transcript_text: str
+    llm_transcript_text: str
     diff_text: str
     files_to_write: list[Path]  # Files that were *actually* included
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-
 from .config import Config
 from .model import BuiltArtifacts, Snapshot, FilteredSnapshot
 from ..io.out_paths import get_output_paths
@@ -12,8 +11,10 @@ from ..io.manifest import build_manifest, write_manifest_atomic
 @dataclass(frozen=True)
 class Artifacts:
     transcript_text: str
+    llm_transcript_text: str
     diff_text: str
     transcript_path: Path
+    llm_transcript_path: Path
     changes_path: Path
     manifest_path: Path
 
@@ -29,6 +30,10 @@ def write_built(
 
     # ensure out dir exists + write artifacts
     write_text_atomic(out.transcript_path, built.transcript_text)
+
+    if cfg.generate_llm_transcript and not cfg.generate_project_tree_only:
+        write_text_atomic(out.llm_transcript_path, built.llm_transcript_text)
+
     write_text_atomic(out.changes_path, built.diff_text)
 
     manifest_path = out.out_dir / "manifest.json"
@@ -37,8 +42,10 @@ def write_built(
 
     return Artifacts(
         transcript_text=built.transcript_text,
+        llm_transcript_text=built.llm_transcript_text,
         diff_text=built.diff_text,
         transcript_path=out.transcript_path,
+        llm_transcript_path=out.llm_transcript_path,
         changes_path=out.changes_path,
         manifest_path=manifest_path,
     )

@@ -8,6 +8,7 @@ from ..core.config import OutputSpec
 class OutputPaths:
     out_dir: Path
     transcript_path: Path
+    llm_transcript_path: Path
     changes_path: Path
 
 
@@ -17,5 +18,6 @@ def get_output_paths(project_root: Path, outputs: OutputSpec) -> OutputPaths:
     return OutputPaths(
         out_dir=out_dir,
         transcript_path=out_dir / outputs.transcript_name,
+        llm_transcript_path=out_dir / outputs.llm_transcript_name,
         changes_path=out_dir / outputs.changes_name,
     )

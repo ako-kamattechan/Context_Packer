@@ -11,6 +11,7 @@ DiffMode = Literal["unified"]
 class OutputSpec:
     out_dir_name: str = "contextpacker_out"
     transcript_name: str = "transcript.txt"
+    llm_transcript_name: str = "LLM_transcript.txt"
     changes_name: str = "changes.diff"
 
 
@@ -25,6 +26,9 @@ class Config:
     allow_filenames: tuple[str, ...] = ()
     sampling: SamplingSpec = field(default_factory=SamplingSpec)
 
+    # New output
+    generate_llm_transcript: bool = True
+
     # Safety / determinism
     max_file_bytes: int = 512_000  # 512 KB per file (tune later)
     max_total_bytes: int = 8_000_000  # optional (not enforced yet)
@@ -34,7 +38,6 @@ class Config:
     preview_max_files: int = 200
     preview_max_chars: int = 50_000
     app_title: str = "ContextPacker"
-
     outputs: OutputSpec = field(default_factory=OutputSpec)
 
     def normalized(self) -> "Config":
@@ -57,4 +60,5 @@ class Config:
             outputs=self.outputs,
             allow_filenames=tuple(sorted(set(self.allow_filenames))),
             sampling=self.sampling.normalized(),
+            generate_llm_transcript=self.generate_llm_transcript,
         )

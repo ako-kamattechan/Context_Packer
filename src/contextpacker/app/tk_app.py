@@ -4,7 +4,6 @@ from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 import threading
 import queue
-
 from ..core.config import Config
 from ..core.sampling import SamplingSpec
 from ..core.runner import run, run_preview
@@ -14,7 +13,6 @@ from ..policy.ignore_spec import compile_ignore
 from ..io.clipboard import set_clipboard_with_root
 from ..io.open_folder import open_folder
 from .. import __version__
-
 from .theme import PALETTE, build_ttk_theme
 from .grid_bg import GridBackground
 
@@ -29,9 +27,7 @@ class TkApp:
         self.root.iconphoto(
             True, tk.PhotoImage(file=Path(__file__).parent / "resources" / "icon.png")
         )
-
         self.style = build_ttk_theme(root)
-
         self.project_path: Path | None = None
         self.vars: dict[str, tk.BooleanVar] = {}
 
@@ -101,16 +97,13 @@ class TkApp:
         self.preset_menu.bind("<<ComboboxSelected>>", lambda e: self.populate_list())
 
         ## Checkboxes (Top)
-
         self.include_root_text = tk.BooleanVar(value=True)
-
         self.chk_root_text = ttk.Checkbutton(
             ctrl,
             text="Include root text files",
             variable=self.include_root_text,
             style="TCheckbutton",
         )
-
         self.chk_root_text.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
 
         self.generate_tree_only = tk.BooleanVar(value=False)
@@ -126,6 +119,7 @@ class TkApp:
         self.sample_block_mean = tk.StringVar(value="12.0")  # float
         self.sample_drop_prob = tk.StringVar(value="")  # optional float
         self.sample_preserve_prefix = tk.StringVar(value="0")  # int
+
         self.chk_tree_only = ttk.Checkbutton(
             ctrl,
             text="Generate project tree only",
@@ -175,13 +169,17 @@ class TkApp:
         ttk.Label(samp_row, text="Keep:", style="TLabel").grid(
             row=0, column=4, sticky="w"
         )
-        self.ent_sample_keep = ttk.Entry(samp_row, textvariable=self.sample_keep, width=6)
+        self.ent_sample_keep = ttk.Entry(
+            samp_row, textvariable=self.sample_keep, width=6
+        )
         self.ent_sample_keep.grid(row=0, column=5, sticky="w", padx=(6, 12))
 
         ttk.Label(samp_row, text="Seed:", style="TLabel").grid(
             row=0, column=6, sticky="w"
         )
-        self.ent_sample_seed = ttk.Entry(samp_row, textvariable=self.sample_seed, width=6)
+        self.ent_sample_seed = ttk.Entry(
+            samp_row, textvariable=self.sample_seed, width=6
+        )
         self.ent_sample_seed.grid(row=0, column=7, sticky="w", padx=(6, 12))
 
         # extra params for block-drop/prefix preservation
@@ -233,14 +231,12 @@ class TkApp:
             list_panel, orient="vertical", command=self.canvas.yview
         )
         self.scroll_frame = ttk.Frame(self.canvas, style="Panel.TFrame")
-
         self.scroll_frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
         )
         self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
@@ -276,7 +272,6 @@ class TkApp:
             style="Accent.TButton",
             state="disabled",
         )
-
         self.btn_generate.grid(row=0, column=1, padx=6, pady=12)
 
         self.btn_cancel = ttk.Button(
@@ -291,7 +286,6 @@ class TkApp:
         # 7. Result Helper Panel (Open/Copy) - Hidden by default
         self.result_panel = ttk.Frame(self.container, style="TFrame")
         self.result_panel.grid(row=7, column=0, sticky="ew", padx=14, pady=(0, 10))
-        # (Populated dynamically on success)
 
         # 8. Status Bar
         self.status = ttk.Label(self.container, text="Ready", style="Muted.TLabel")
@@ -312,7 +306,6 @@ class TkApp:
     def _resize_container(self, event):
         w = max(event.width - 40, 600)
         h = max(event.height - 40, 600)
-        # Uses stored window ID
         wid = getattr(self, "_container_window_id", None)
         if wid is not None:
             try:
@@ -327,7 +320,6 @@ class TkApp:
         self._pulse_tick(True)
 
     def _pulse_tick(self, up: bool):
-        # Breathing or Pulse effect on the Generate Button
         style = "Pulse.TButton" if up else "Accent.TButton"
         self.btn_generate.configure(style=style)
         self._pulse_job = self.root.after(100, self._pulse_tick, not up)
@@ -360,16 +352,18 @@ class TkApp:
         )
         self.ent_sample_keep.state(["!disabled"] if sampling_enabled else ["disabled"])
         self.ent_sample_seed.state(["!disabled"] if sampling_enabled else ["disabled"])
-        self.ent_sample_prefix.state(["!disabled"] if sampling_enabled else ["disabled"])
+        self.ent_sample_prefix.state(
+            ["!disabled"] if sampling_enabled else ["disabled"]
+        )
         self.ent_sample_block_mean.state(["!disabled"] if block_mode else ["disabled"])
         self.ent_sample_drop_prob.state(["!disabled"] if block_mode else ["disabled"])
 
     # App Logic
-
     def load_project(self):
         path = filedialog.askdirectory()
         if not path:
             return
+
         self.project_path = Path(path).resolve()
         self.lbl_project.configure(text=f"Project: {self.project_path.name}")
         self.btn_generate.configure(state="normal")
@@ -387,6 +381,7 @@ class TkApp:
         for w in self.scroll_frame.winfo_children():
             w.destroy()
         self.vars.clear()
+
         if not self.project_path:
             return
 
@@ -419,7 +414,6 @@ class TkApp:
             v.set(s)
 
     # Threading & Jobs
-
     def start_job(self, kind: str):
         if not self.project_path:
             return
@@ -431,36 +425,35 @@ class TkApp:
             return
 
         preset = self.preset_var.get()
-
         allow_suffixes: tuple[str, ...] = ()
         allow_filenames: tuple[str, ...] = ()
 
         if preset == "android_kotlin":
             # "sources of truth" for a Kotlin Android project
             allow_suffixes = (
-                ".kt",  # Kotlin sources
-                ".kts",  # Gradle Kotlin scripts
-                ".xml",  # AndroidManifest + res xml + misc xml
-                ".properties",  # gradle.properties, local.properties (if present)
-                ".pro",  # proguard-rules.pro
-                ".toml",  # version catalogs (libs.versions.toml)
-                ".txt",  # optional (e.g., some gradle metadata you may care about)
-                ".md",  # optional docs
+                ".kt",
+                ".kts",
+                ".xml",
+                ".properties",
+                ".pro",
+                ".toml",
+                ".txt",
+                ".md",
             )
             allow_filenames = ("gradlew",)
 
         elif preset == "hc11cc":
             # HC11 compiler project boundary
             allow_suffixes = (
-                ".rs",  # Rust sources
-                ".toml",  # Cargo.toml (+ other toml)
-                ".lock",  # Cargo.lock
-                ".md",  # docs
-                ".txt",  # notes
-                ".hc",  # your language sources (if you use this extension)
-                ".asm",  # assembly
-                ".s",  # asm alt
-                ".inc",  # includes
+                ".rs",
+                ".toml",
+                ".lock",
+                ".md",
+                ".txt",
+                ".hc",
+                ".asm",
+                ".s",
+                ".inc",
             )
             allow_filenames = (
                 "Cargo.toml",
@@ -468,6 +461,38 @@ class TkApp:
                 "README.md",
                 "LICENSE",
                 ".gitignore",
+            )
+
+        elif preset == "juce_cpp":
+            allow_suffixes = (
+                ".h",
+                ".hpp",
+                ".hh",
+                ".hxx",
+                ".c",
+                ".cc",
+                ".cpp",
+                ".cxx",
+                ".ipp",
+                ".inl",
+                ".ixx",
+                ".m",
+                ".mm",
+                ".r",
+                ".rc",
+                ".txt",
+                ".md",
+                ".json",
+                ".xml",
+                ".jucer",
+                ".cmake",
+                ".natvis",
+            )
+            allow_filenames = (
+                "CMakeLists.txt",
+                ".gitignore",
+                "README.md",
+                "LICENSE",
             )
 
         # Sampling spec (safe parse)
@@ -516,6 +541,7 @@ class TkApp:
             include_root_text_files=self.include_root_text.get(),
             generate_project_tree_only=self.generate_tree_only.get(),
             sampling=sampling,
+            generate_llm_transcript=True,
         )
 
         # UI Lock
@@ -592,28 +618,27 @@ class TkApp:
         if msg == "error":
             messagebox.showerror("Error", data)
             self.status.configure(text="Error occurred", foreground="#FF5555")
-
         elif msg == "cancelled":
             self.status.configure(text="Cancelled", foreground=PALETTE["muted"])
-
         elif msg == "preview_done":
             self._show_preview_results(data)
             self.status.configure(
                 text=f"Preview Ready: {data.file_count} files selected",
                 foreground=PALETTE["text"],
             )
-
         elif msg == "generate_done":
             self._show_generate_results(data)
             self.status.configure(
                 text="Generation Complete", foreground=PALETTE["accent"]
             )
-            messagebox.showinfo(
-                "Success", f"Generated {len(data.transcript_text)} chars context."
-            )
+            msg_text = f"Generated {len(data.transcript_text)} chars context."
+            if data.llm_transcript_text:
+                msg_text += (
+                    f"\nGenerated {len(data.llm_transcript_text)} chars LLM context."
+                )
+            messagebox.showinfo("Success", msg_text)
 
     #  Result Panels
-
     def _show_preview_results(self, data):
         # data is PreviewArtifacts
         f = self.result_panel
@@ -673,7 +698,6 @@ class TkApp:
     def _show_generate_results(self, data):
         # Data is Artifacts
         f = self.result_panel
-
         row = ttk.Frame(f, style="TFrame")
         row.pack(fill="x", pady=5)
 
@@ -697,6 +721,16 @@ class TkApp:
             ),
         )
         btn_cp.pack(side="left", padx=5)
+
+        btn_cp_llm = ttk.Button(
+            row,
+            text="Copy LLM Transcript Path",
+            style="Ghost.TButton",
+            command=lambda: set_clipboard_with_root(
+                self.root, str(data.llm_transcript_path)
+            ),
+        )
+        btn_cp_llm.pack(side="left", padx=5)
 
         ttk.Label(f, text=f"Written to: {path.name}", style="Muted.TLabel").pack(
             anchor="w"

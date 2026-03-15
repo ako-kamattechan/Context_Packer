@@ -6,7 +6,6 @@ from .pipeline_build import build
 from .pipeline_emit import write_built, Artifacts
 from .model import PreviewArtifacts
 from .cancel import CancelToken, check_cancel
-
 from ..io.out_paths import get_output_paths
 from ..io.manifest import build_manifest
 from ..render.tree_render import render_tree
@@ -17,7 +16,6 @@ from .sampling import sample_transcript_text
 def run(config: Config, cancel: CancelToken | None = None) -> Artifacts:
     check_cancel(cancel)
     cfg = config.normalized()
-
     snap = enumerate_snapshot(cfg.project_root, cancel)
     filt = filter_snapshot(snap, cfg, cancel)
 
@@ -31,14 +29,12 @@ def run(config: Config, cancel: CancelToken | None = None) -> Artifacts:
 def run_preview(config: Config, cancel: CancelToken | None = None) -> PreviewArtifacts:
     check_cancel(cancel)
     cfg = config.normalized()
-
     snap = enumerate_snapshot(cfg.project_root, cancel)
     filt = filter_snapshot(snap, cfg, cancel)
 
     # Compute stats for preview
     files_included = filt.files_to_read
     valid_files = [p for p in files_included if p in snap.nodes]
-
     total_bytes = sum(snap.nodes[p].size_bytes for p in valid_files)
     file_count = len(valid_files)
 
@@ -58,22 +54,25 @@ def run_preview(config: Config, cancel: CancelToken | None = None) -> PreviewArt
     # Preview snippet (optional)
     out_paths = get_output_paths(cfg.project_root, cfg.outputs)
     manifest = build_manifest(cfg, snap, filt, out_paths, valid_files)
-
     truncated = filt.truncated_by_total
 
     transcript_preview = ""
     if not cfg.generate_project_tree_only:
         # Build a small transcript snippet
         snippet_parts = []
+
         # e.g. first 3 files
         for p in valid_files[:3]:
             check_cancel(cancel)
             content = read_text_safe(p)
+
             # truncate large files for preview snippet
             if len(content) > 1000:
                 content = content[:1000] + "\n... (truncated for preview)"
+
             rel = p.relative_to(cfg.project_root)
             snippet_parts.append(f"File: {rel}\n[\n{content}\n]\n{'-' * 40}\n")
+
         transcript_preview, _sampling_meta = sample_transcript_text(
             "\n".join(snippet_parts),
             cfg.sampling,
